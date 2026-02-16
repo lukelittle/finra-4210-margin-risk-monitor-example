@@ -22,7 +22,12 @@ from pyspark.sql.types import *
 KAFKA_BROKERS = os.getenv('KAFKA_BROKERS', 'localhost:9092')
 CHECKPOINT_LOCATION = os.getenv('CHECKPOINT_LOCATION', '/tmp/checkpoints')
 MAINTENANCE_RATE = 0.25
+
+# SPY stress scenarios (beta-weighted)
 SPY_SCENARIOS = [-0.08, -0.06, -0.04, -0.02, 0.0, 0.02, 0.04, 0.06]
+
+# TIMS-style scenarios (simplified portfolio margin)
+TIMS_SCENARIOS = [-0.15, -0.10, -0.05, -0.03, -0.01, 0.01, 0.03, 0.05, 0.10, 0.15]
 
 # Schemas
 fills_schema = StructType([
@@ -101,7 +106,9 @@ def main():
     ).withColumn("cash", col("total_mv") * 0.1) \
      .withColumn("equity", col("cash") + col("total_mv")) \
      .withColumn("maintenance_req", col("total_mv") * MAINTENANCE_RATE) \
-     .withColumn("excess", col("equity") - col("maintenance_req"))
+     .withColumn("excess", col("equity") - col("maintenance_req")) \
+     .withColumn("excess_pct", col("excess") / col("total_mv")) \
+     .withColumn("calc_timestamp", current_timestamp())
     
     # Write margin calculations
     margin.selectExpr("to_json(struct(*)) AS value") \
@@ -113,10 +120,12 @@ def main():
         .outputMode("update") \
         .start()
     
-    # Stress testing
+    # Beta-weighted stress testing (SPY scenarios)
+    print("Setting up beta-weighted stress tests...")
     for scenario in SPY_SCENARIOS:
         stress = margin \
             .withColumn("scenario", lit(scenario)) \
+            .withColumn("scenario_type", lit("SPY_BETA_WEIGHTED")) \
             .withColumn("delta_pnl", col("beta_weighted_exposure") * lit(scenario)) \
             .withColumn("equity_stressed", col("equity") + col("delta_pnl")) \
             .withColumn("excess_stressed", col("equity_stressed") - col("maintenance_req")) \
@@ -127,11 +136,35 @@ def main():
             .format("kafka") \
             .option("kafka.bootstrap.servers", KAFKA_BROKERS) \
             .option("topic", "stress.beta_spy.v1") \
-            .option("checkpointLocation", f"{CHECKPOINT_LOCATION}/stress-{scenario}") \
+            .option("checkpointLocation", f"{CHECKPOINT_LOCATION}/stress-spy-{scenario}") \
             .outputMode("update") \
             .start()
     
-    print("Streams started. Processing...")
+    # TIMS-style scenario evaluation (simplified portfolio margin)
+    print("Setting up TIMS-style scenario evaluation...")
+    for scenario in TIMS_SCENARIOS:
+        # Compute PnL for each position under this scenario
+        tims_pnl = enriched \
+            .withColumn("scenario", lit(scenario)) \
+            .withColumn("position_pnl", col("qty") * col("price") * lit(scenario))
+        
+        # Aggregate per account to get portfolio PnL
+        tims_account = tims_pnl.groupBy("account_id").agg(
+            sum("position_pnl").alias("portfolio_pnl"),
+            lit(scenario).alias("scenario")
+        ).withColumn("scenario_type", lit("TIMS_PORTFOLIO")) \
+         .withColumn("calc_timestamp", current_timestamp())
+        
+        tims_account.selectExpr("to_json(struct(*)) AS value") \
+            .writeStream \
+            .format("kafka") \
+            .option("kafka.bootstrap.servers", KAFKA_BROKERS) \
+            .option("topic", "stress.beta_spy.v1") \
+            .option("checkpointLocation", f"{CHECKPOINT_LOCATION}/tims-{scenario}") \
+            .outputMode("update") \
+            .start()
+    
+    print("All streams started. Processing...")
     spark.streams.awaitAnyTermination()
 
 if __name__ == "__main__":
