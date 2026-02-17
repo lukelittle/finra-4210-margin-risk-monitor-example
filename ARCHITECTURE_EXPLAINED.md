@@ -117,19 +117,20 @@ resource "aws_emrserverless_application" "spark" {
 
 This teaches students that **production systems make trade-offs** between cost, latency, and availability.
 
-## Why Not Flink?
+## Why Spark Streaming?
 
-**Flink** (via Kinesis Data Analytics) would be more appropriate for production streaming because:
-- True streaming (not micro-batches)
-- Lower latency
-- Better state management
-- Purpose-built for streaming
-
-**But we're using Spark because**:
+**Spark Streaming** is the right choice for this educational project because:
 - Students are learning EMR in class
-- Spark is more widely known
+- Spark is more widely known and taught
 - Easier to understand for beginners
+- Structured Streaming API is intuitive (SQL-like)
 - Still demonstrates streaming concepts well
+- 42% cheaper than alternatives ($0.13/hour vs. $0.22/hour)
+
+**Trade-offs:**
+- Micro-batch processing (5-10 second latency) vs. true streaming
+- Higher latency than specialized streaming engines
+- But: Perfectly acceptable for margin monitoring use case
 
 ## The Spark Job
 
@@ -221,8 +222,8 @@ A: Yes! No clusters to manage, auto-scales, auto-stops, pay-per-use. It's server
 **Q: Why Zookeeper in Docker but not AWS?**
 A: MSK Serverless manages Zookeeper internally. Locally, we use Confluent's images which include Zookeeper.
 
-**Q: Can I use Flink instead?**
-A: Yes! See `flink/margin_calculator.py` for a Flink implementation. But Spark aligns better with the EMR coursework.
+**Q: Why Spark instead of other streaming engines?**
+A: Spark aligns with EMR coursework, is widely taught, and provides an intuitive API. It's perfect for learning streaming concepts.
 
 **Q: What about Kafka Streams or ksqlDB?**
 A: Those are great alternatives! But Spark is more widely taught and provides more flexibility for complex analytics.

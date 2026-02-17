@@ -298,7 +298,7 @@ pip install -r requirements.txt
 
 - GitHub Issues: Report bugs or ask questions
 - Documentation: Comprehensive guides in `docs/`
-- Blog Post: `blog/posts/real-time-margin-risk-finra-4210.md`
+- Blog Post: [https://lukelittle.com/posts/2026/02/real-time-margin-and-stress-monitoring-finra-rule-4210/](https://lukelittle.com/posts/2026/02/real-time-margin-and-stress-monitoring-finra-rule-4210/)
 
 ## License
 
